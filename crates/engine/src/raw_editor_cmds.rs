@@ -221,15 +221,7 @@ fn run(editor: &str, program: &str, args: &[String], dir: &Path, ctx: &crate::jo
         .map_err(|e| EngineError::Other(format!("{editor} ({program}): {e}")))?;
     let started = std::time::Instant::now();
     let status = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => break status,
-            Ok(None) => {}
-            Err(e) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(EngineError::Other(format!("{editor}: {e}")));
-            }
-        }
+        // Before the exit check: an editor that finishes after a cancel or the deadline opens nothing.
         let stop = if ctx.cancelled() {
             Some(format!("{editor} was stopped: the develop was cancelled"))
         } else if started.elapsed() > deadline {
@@ -241,6 +233,15 @@ fn run(editor: &str, program: &str, args: &[String], dir: &Path, ctx: &crate::jo
             let _ = child.kill();
             let _ = child.wait();
             return Err(EngineError::Other(why));
+        }
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) => {}
+            Err(e) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(EngineError::Other(format!("{editor}: {e}")));
+            }
         }
         std::thread::sleep(std::time::Duration::from_millis(50));
     };

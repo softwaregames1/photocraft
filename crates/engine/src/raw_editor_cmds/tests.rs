@@ -147,6 +147,10 @@ fn a_stuck_editor_is_stopped() {
     ctx.cancel();
     let e = run("darktable", program, &args, &dir, &ctx, std::time::Duration::from_secs(600)).unwrap_err().to_string();
     assert!(e.contains("cancelled"), "{e}");
+    // An editor that exits at once after a cancel opens nothing either.
+    let quick = ["-c".to_string(), "exit 0".to_string()];
+    let e = run("darktable", program, &quick, &dir, &ctx, std::time::Duration::from_secs(600)).unwrap_err().to_string();
+    assert!(e.contains("cancelled"), "{e}");
     assert!(started.elapsed() < std::time::Duration::from_secs(10), "{:?}", started.elapsed());
     let _ = std::fs::remove_dir_all(&dir);
 }
