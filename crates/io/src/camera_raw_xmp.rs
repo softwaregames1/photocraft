@@ -3,8 +3,9 @@
 //! `x:xmpmeta/rdf:RDF/rdf:Description`, as attributes or as child elements.
 //!
 //! Loading applies only the settings the file holds, over the current ones, as Camera Raw's
-//! Load Settings does; settings PhotoCraft has no control for (lens corrections, calibration,
-//! geometry, defringe, …) are ignored and named in the report. Saving writes every supported
+//! Load Settings does; settings PhotoCraft has no control for (lens corrections, geometry,
+//! defringe, …) are ignored and named in the report. The same reader fills the dialog from a
+//! raw file's sidecar (`IMG_0001.xmp` beside `IMG_0001.CR2`), and the writer keeps it. Saving writes every supported
 //! control, so loading the file in Photoshop reproduces the dialog.
 //!
 //! White balance: a Camera Raw Filter on a rendered image uses the relative
@@ -100,6 +101,14 @@ const SCALARS: &[(&str, Field, f32, f32)] = &[
     ("PostCropVignetteRoundness", |p| &mut p.vignette_roundness, -100.0, 100.0),
     ("PostCropVignetteFeather", |p| &mut p.vignette_feather, 0.0, 100.0),
     ("PostCropVignetteHighlightContrast", |p| &mut p.vignette_highlights, 0.0, 100.0),
+    // Calibration
+    ("ShadowTint", |p| &mut p.shadow_tint, -100.0, 100.0),
+    ("RedHue", |p| &mut p.calibration_hue[0], -100.0, 100.0),
+    ("RedSaturation", |p| &mut p.calibration_sat[0], -100.0, 100.0),
+    ("GreenHue", |p| &mut p.calibration_hue[1], -100.0, 100.0),
+    ("GreenSaturation", |p| &mut p.calibration_sat[1], -100.0, 100.0),
+    ("BlueHue", |p| &mut p.calibration_hue[2], -100.0, 100.0),
+    ("BlueSaturation", |p| &mut p.calibration_sat[2], -100.0, 100.0),
 ];
 
 type Curve = fn(&mut CameraRaw) -> &mut Vec<[f32; 2]>;
@@ -210,21 +219,6 @@ fn apply(params: &mut CameraRaw, report: &mut LoadReport, name: &str, value: &st
     }
 }
 
-/// The sidecars Camera Raw keeps a raw file's settings in, most likely first: the raw's path with
-/// its extension replaced by `.xmp` (`IMG_0001.CR2` → `IMG_0001.xmp`), then `.XMP`. A path without
-/// an extension has none. darktable's `IMG_0001.CR2.xmp` holds darktable's own settings, not
-/// Camera Raw's, so it is not one.
-pub fn sidecar_paths(raw: &str) -> Vec<String> {
-    let name_start = raw.rfind(['/', '\\']).map_or(0, |i| i + 1);
-    match raw.rfind('.').filter(|&dot| dot > name_start) {
-        Some(dot) => {
-            let base = raw.get(..dot).unwrap_or(raw);
-            vec![format!("{base}.xmp"), format!("{base}.XMP")]
-        }
-        None => Vec::new(),
-    }
-}
-
 /// Apply a Camera Raw settings file over `params`. Fails on input that isn't XMP or holds no
 /// Camera Raw settings; never panics on malformed input.
 pub fn load(params: &mut CameraRaw, bytes: &[u8]) -> Result<LoadReport, String> {
@@ -278,6 +272,25 @@ fn signed(v: f32, decimals: usize) -> String {
 
 fn escape(s: &str) -> String {
     s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
+}
+
+/// The XMP toolkit [`save`] names on `x:xmpmeta`.
+const TOOLKIT: &str = "PhotoCraft";
+const META_NS: &str = "adobe:ns:meta/";
+
+/// Did [`save`] write this file? True when its `x:xmpmeta` names PhotoCraft as the toolkit
+/// (`x:xmptk`). Lightroom, Bridge and Camera Raw put their own toolkit there when they write a
+/// file, so a sidecar another application touched since reads false. Never panics.
+pub fn is_photocraft_xmp(bytes: &[u8]) -> bool {
+    if bytes.len() > MAX_XMP_BYTES {
+        return false;
+    }
+    let Ok(text) = std::str::from_utf8(bytes) else { return false };
+    let Ok(doc) = roxmltree::Document::parse(text.trim_start_matches('\u{feff}')) else { return false };
+    doc.descendants()
+        .find(|n| n.is_element() && n.tag_name().namespace() == Some(META_NS) && n.tag_name().name() == "xmpmeta")
+        .and_then(|n| n.attribute((META_NS, "xmptk")))
+        == Some(TOOLKIT)
 }
 
 /// Write `params` as a Camera Raw settings file Photoshop's Load Settings… reads.
@@ -372,7 +385,8 @@ mod tests {
         assert_eq!(p.point_curve_red, vec![[0.0, 0.0], [128.0, 140.0], [255.0, 255.0]]);
         assert_eq!(p.dehaze, 12.0);
         // Lens vignetting, calibration and geometry have no counterpart.
-        assert_eq!(r.ignored, vec!["VignetteAmount".to_string(), "RedHue".to_string()]);
+        assert_eq!(r.ignored, vec!["VignetteAmount".to_string()], "the Calibration panel's keys load now");
+        assert_eq!(p.calibration_hue[0], -5.0);
     }
 
     #[test]
@@ -437,12 +451,22 @@ mod tests {
     }
 
     #[test]
-    fn a_raws_sidecar_replaces_its_extension() {
-        assert_eq!(sidecar_paths("/p/IMG_0001.CR2"), ["/p/IMG_0001.xmp", "/p/IMG_0001.XMP"]);
-        assert_eq!(sidecar_paths(r"C:\shots.v2\a.nef"), [r"C:\shots.v2\a.xmp", r"C:\shots.v2\a.XMP"]);
-        // No extension in the file name (a dot in a folder doesn't count), or a hidden file.
-        assert!(sidecar_paths("/p.d/IMG").is_empty());
-        assert!(sidecar_paths("/p/.cr2").is_empty());
-        assert!(sidecar_paths("").is_empty());
+    fn is_photocraft_xmp_reads_the_toolkit_marker() {
+        let own = save(&CameraRaw { contrast: 15.0, ..CameraRaw::default() });
+        assert!(is_photocraft_xmp(own.as_bytes()));
+        let wrapped = format!("\u{feff}<?xpacket begin=\"\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>\n{own}<?xpacket end=\"w\"?>");
+        assert!(is_photocraft_xmp(wrapped.as_bytes()), "an xpacket wrapper and a byte order mark");
+        assert!(!is_photocraft_xmp(FIXTURE), "Camera Raw's own toolkit");
+        for other in [
+            &b""[..],
+            b"<x:xmpmeta",
+            b"<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"/>",
+            b"<x:xmpmeta xmlns:x=\"adobe:ns:meta/\" xmptk=\"PhotoCraft\"/>",
+            b"<x:xmpmeta xmlns:x=\"other:ns/\" x:xmptk=\"PhotoCraft\"/>",
+            b"<x:xmpmeta xmlns:x=\"adobe:ns:meta/\" x:xmptk=\"PhotoCraft 2\"/>",
+            b"\xff\xfe",
+        ] {
+            assert!(!is_photocraft_xmp(other), "{}", String::from_utf8_lossy(other));
+        }
     }
 }
