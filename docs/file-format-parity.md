@@ -73,7 +73,7 @@ supports many more, including CR3).
 | Fujifilm RAF (Bayer and X-Trans) | uncompressed only; no Fuji colour calibration | |
 | Others (CRW, 3FR, IIQ, X3F, SRW, MRW, ERF…) | embedded preview only | |
 | .xmp sidecars, highlight modes, raw preferences | missing | FILE-215-11 |
-| Round trip through darktable or RapidRAW | yes (PhotoCraft only) | 2026-10-26: File › Edit in Raw Editor opens the raw in the editor set in Preferences › Camera Raw › External Editor; File › Develop in Raw Editor runs its headless export (`darktable-cli`, `RapidRAW export`), which applies its sidecar edits, and opens the 16-bit TIFF. Separate programs, nothing linked; desktop only (`crates/engine/src/raw_editor_cmds.rs`) |
+| Round trip through darktable or RapidRAW | yes (PhotoCraft only) | 2026-10-26: File › Edit in Raw Editor opens the raw in the editor set in Preferences › Camera Raw › External Editor; File › Develop in Raw Editor runs its headless export (`darktable-cli`, `RapidRAW export`), which applies its sidecar edits, and opens the 16-bit TIFF. Separate programs, nothing linked; desktop only (`crates/engine/src/cmd/raw_editor_cmds.rs`) |
 | Camera Raw as a PSD smart filter | partial | 2026-10-07: WB, Light/Presence, curves, HSL, grading, detail, grain, vignette mapped (FILE-215-12) |
 
 2026-10-11: on #2135's embedded-JPEG rendering work, open-time Camera Raw tuning
