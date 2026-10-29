@@ -932,7 +932,8 @@ pub struct RawDefaults {
     pub demosaic: RawDemosaic,
     /// darktable or RapidRAW, for File › Edit in Raw Editor and Develop in Raw Editor
     /// (`raw_editor_cmds`): the program (`darktable`, `darktable-cli`, `RapidRAW`) or its `.app`
-    /// bundle. Empty: none.
+    /// bundle. Empty: none. A trusted local choice: only the user sets it, in Preferences;
+    /// automation's preference policy refuses it.
     pub external_editor: String,
     /// Keep a raw file's develop settings in a sidecar (`IMG_0001.xmp` beside `IMG_0001.CR2`),
     /// as Camera Raw's "Save image settings in: Sidecar .xmp files"; the sidecar is read again

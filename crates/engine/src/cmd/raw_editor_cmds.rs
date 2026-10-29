@@ -8,8 +8,10 @@
 //! new, untitled document. Nothing of either editor is linked into PhotoCraft: they run as their
 //! own processes, so their licences (GPL, AGPL) stay theirs.
 //!
-//! Only a program named after one of the two editors runs: the path is a preference an agent can
-//! set, and it must not become a way to start any program.
+//! The program is a trusted local choice: the user picks it in Preferences, and automation may not
+//! set it (`photocraft-automation`'s preference policy refuses `rawDefaults.externalEditor`). Its
+//! file name selects which editor's command line to use; that is not a check on what the file is,
+//! since a renamed program or a link with an editor's name passes it.
 
 use std::path::{Path, PathBuf};
 
@@ -51,9 +53,11 @@ fn bad(cmd: &str, msg: impl Into<String>) -> EngineError {
     EngineError::BadParams { cmd: cmd.into(), msg: msg.into() }
 }
 
-/// What `path` (Preferences › Camera Raw › External Editor) runs: `darktable`, `darktable-cli`,
-/// `RapidRAW` (with `.exe` on Windows) or their `.app` bundles, matched without case. Anything else
-/// is refused.
+/// Which editor `path` (Preferences › Camera Raw › External Editor) is, by its file name:
+/// `darktable`, `darktable-cli`, `RapidRAW` (with `.exe` on Windows) or their `.app` bundles,
+/// matched without case, and where its window program and headless exporter are. Another name is
+/// refused because PhotoCraft doesn't know its command line. This picks the editor; it doesn't
+/// vouch for the file, which the user chose.
 pub fn editor_paths(path: &str) -> std::result::Result<EditorPaths, String> {
     let path = path.trim();
     if path.is_empty() {
